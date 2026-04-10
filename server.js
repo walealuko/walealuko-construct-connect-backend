@@ -108,10 +108,21 @@ app.put("/api/auth/profile", async (req, res) => {
   }
 });
 
-// Products: Get all
+// Products: Get all with search and category filter
 app.get("/api/products", async (req, res) => {
   try {
-    const products = await Product.find().sort({ createdAt: -1 });
+    const { search, category } = req.query;
+    let query = {};
+
+    if (category && category !== "all") {
+      query.category = category;
+    }
+
+    if (search) {
+      query.$text = { $search: search };
+    }
+
+    const products = await Product.find(query).sort({ createdAt: -1 });
     res.json(products);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -138,6 +149,7 @@ app.post("/api/products", async (req, res) => {
       category: category || "general",
       sellerId: user._id,
       sellerName: user.businessName || user.name,
+      sellerLocation: user.location || "",
       imageUrl: imageUrl || "",
       stock: parseInt(stock) || 0,
     });
