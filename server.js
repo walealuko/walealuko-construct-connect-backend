@@ -28,12 +28,21 @@ app.get("/", (req, res) => {
 
 // Auth: Register
 app.post("/api/auth/register", async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password, role, businessName, cacRegNo, location, phone } = req.body;
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await User.create({ name, email, password: hashedPassword, role: role || "buyer" });
+    const user = await User.create({
+      name, email, password: hashedPassword, role: role || "buyer",
+      businessName: businessName || "", cacRegNo: cacRegNo || "", location: location || "", phone: phone || ""
+    });
     const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: "7d" });
-    res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role } });
+    res.json({
+      token,
+      user: {
+        id: user._id, name: user.name, email: user.email, role: user.role,
+        businessName: user.businessName, cacRegNo: user.cacRegNo, location: user.location, phone: user.phone
+      }
+    });
   } catch (err) {
     res.status(400).json({ message: "Email may already be in use" });
   }
@@ -48,7 +57,13 @@ app.post("/api/auth/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
     const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: "7d" });
-    res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role } });
+    res.json({
+      token,
+      user: {
+        id: user._id, name: user.name, email: user.email, role: user.role,
+        businessName: user.businessName, cacRegNo: user.cacRegNo, location: user.location, phone: user.phone
+      }
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -64,6 +79,31 @@ app.get("/api/auth/me", async (req, res) => {
     res.json(user);
   } catch {
     res.status(401).json({ message: "Invalid token" });
+  }
+});
+
+// Auth: Update profile
+app.put("/api/auth/profile", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ message: "No token" });
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const { businessName, cacRegNo, location, phone, name } = req.body;
+
+    const user = await User.findById(decoded.userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    if (businessName !== undefined) user.businessName = businessName;
+    if (cacRegNo !== undefined) user.cacRegNo = cacRegNo;
+    if (location !== undefined) user.location = location;
+    if (phone !== undefined) user.phone = phone;
+    if (name !== undefined) user.name = name;
+
+    await user.save();
+    res.json({ id: user._id, name: user.name, email: user.email, role: user.role, businessName: user.businessName, cacRegNo: user.cacRegNo, location: user.location, phone: user.phone });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 });
 
@@ -96,7 +136,7 @@ app.post("/api/products", async (req, res) => {
       price: parseFloat(price),
       category: category || "general",
       sellerId: user._id,
-      sellerName: user.name,
+      sellerName: user.businessName || user.name,
       imageUrl: imageUrl || "",
       stock: parseInt(stock) || 0,
     });
@@ -122,4 +162,4 @@ app.get("/api/products/my", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on ${PORT} - server.js:107`));
+app.listen(PORT, () => console.log(`Server running on ${PORT} - server.js:140`));
