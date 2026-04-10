@@ -5,6 +5,7 @@ const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("./models/User");
+const Product = require("./models/Product");
 
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || "construct-hub-secret-key";
@@ -18,7 +19,7 @@ app.use(cors({
 }));
 
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB connected - server.js:22"))
+  .then(() => console.log("MongoDB connected - server.js:24"))
   .catch(err => console.error(err));
 
 app.get("/", (req, res) => {
@@ -66,11 +67,59 @@ app.get("/api/auth/me", async (req, res) => {
   }
 });
 
-// Products
+// Products: Get all
 app.get("/api/products", async (req, res) => {
-  const products = await Product.find();
-  res.json(products);
+  try {
+    const products = await Product.find().sort({ createdAt: -1 });
+    res.json(products);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Products: Create (seller only)
+app.post("/api/products", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ message: "No token" });
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(decoded.userId);
+    if (!user || user.role !== "seller") {
+      return res.status(403).json({ message: "Only sellers can add products" });
+    }
+
+    const { name, description, price, category, imageUrl, stock } = req.body;
+    const product = await Product.create({
+      name,
+      description,
+      price: parseFloat(price),
+      category: category || "general",
+      sellerId: user._id,
+      sellerName: user.name,
+      imageUrl: imageUrl || "",
+      stock: parseInt(stock) || 0,
+    });
+
+    res.json(product);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Products: Get seller's products
+app.get("/api/products/my", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ message: "No token" });
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const products = await Product.find({ sellerId: decoded.userId }).sort({ createdAt: -1 });
+    res.json(products);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on ${PORT} - server.js:76`));
+app.listen(PORT, () => console.log(`Server running on ${PORT} - server.js:107`));
