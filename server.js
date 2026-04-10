@@ -27,12 +27,12 @@ app.get("/", (req, res) => {
 
 // Auth: Register
 app.post("/api/auth/register", async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, role } = req.body;
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await User.create({ name, email, password: hashedPassword });
+    const user = await User.create({ name, email, password: hashedPassword, role: role || "buyer" });
     const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: "7d" });
-    res.json({ token, user: { id: user._id, name: user.name, email: user.email } });
+    res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role } });
   } catch (err) {
     res.status(400).json({ message: "Email may already be in use" });
   }
@@ -47,7 +47,7 @@ app.post("/api/auth/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
     const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: "7d" });
-    res.json({ token, user: { id: user._id, name: user.name, email: user.email } });
+    res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
