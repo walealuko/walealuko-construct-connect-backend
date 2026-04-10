@@ -6,6 +6,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("./models/User");
 const Product = require("./models/Product");
+const Review = require("./models/Review");
 
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || "construct-hub-secret-key";
@@ -156,6 +157,62 @@ app.get("/api/products/my", async (req, res) => {
     const decoded = jwt.verify(token, JWT_SECRET);
     const products = await Product.find({ sellerId: decoded.userId }).sort({ createdAt: -1 });
     res.json(products);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Reviews: Create (buyer only)
+app.post("/api/reviews", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ message: "No token" });
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(decoded.userId);
+    if (!user || user.role !== "buyer") {
+      return res.status(403).json({ message: "Only buyers can leave reviews" });
+    }
+
+    const { sellerId, rating, comment } = req.body;
+    const seller = await User.findById(sellerId);
+    if (!seller) return res.status(404).json({ message: "Seller not found" });
+
+    const review = await Review.create({
+      sellerId,
+      sellerName: seller.businessName || seller.name,
+      reviewerId: user._id,
+      reviewerName: user.name,
+      rating: parseInt(rating),
+      comment: comment || "",
+    });
+
+    res.json(review);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Reviews: Get reviews for a seller
+app.get("/api/reviews/seller/:sellerId", async (req, res) => {
+  try {
+    const reviews = await Review.find({ sellerId: req.params.sellerId }).sort({ createdAt: -1 });
+    res.json(reviews);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Reviews: Get average rating for a seller
+app.get("/api/reviews/seller/:sellerId/rating", async (req, res) => {
+  try {
+    const result = await Review.aggregate([
+      { $match: { sellerId: new mongoose.Types.ObjectId(req.params.sellerId) } },
+      { $group: { _id: null, average: { $avg: "$rating" }, count: { $sum: 1 } } }
+    ]);
+    const avg = result.length > 0 ? result[0].average.toFixed(1) : 0;
+    const count = result.length > 0 ? result[0].count : 0;
+    res.json({ average: parseFloat(avg), count });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
