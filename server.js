@@ -129,6 +129,17 @@ app.get("/api/products", async (req, res) => {
   }
 });
 
+// Products: Get single product
+app.get("/api/products/:id", async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ message: "Product not found" });
+    res.json(product);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Products: Create (seller only)
 app.post("/api/products", async (req, res) => {
   try {
@@ -225,6 +236,79 @@ app.get("/api/reviews/seller/:sellerId/rating", async (req, res) => {
     const avg = result.length > 0 ? result[0].average.toFixed(1) : 0;
     const count = result.length > 0 ? result[0].count : 0;
     res.json({ average: parseFloat(avg), count });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Admin: Get all users
+app.get("/api/auth/users", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ message: "No token" });
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const currentUser = await User.findById(decoded.userId);
+    if (!currentUser || currentUser.role !== "admin") {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    const users = await User.find().select("-password").sort({ createdAt: -1 });
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Admin: Update user role
+app.put("/api/auth/users/:userId/role", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ message: "No token" });
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const currentUser = await User.findById(decoded.userId);
+    if (!currentUser || currentUser.role !== "admin") {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    const { role } = req.body;
+    const targetUser = await User.findById(req.params.userId);
+    if (!targetUser) return res.status(404).json({ message: "User not found" });
+    targetUser.role = role;
+    await targetUser.save();
+    res.json({ message: "Role updated", user: { id: targetUser._id, name: targetUser.name, role: targetUser.role } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Admin: Delete user
+app.delete("/api/auth/users/:userId", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ message: "No token" });
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const currentUser = await User.findById(decoded.userId);
+    if (!currentUser || currentUser.role !== "admin") {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    await User.findByIdAndDelete(req.params.userId);
+    await Product.deleteMany({ sellerId: req.params.userId });
+    res.json({ message: "User and their products deleted" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Admin: Delete product
+app.delete("/api/products/:productId", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ message: "No token" });
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const currentUser = await User.findById(decoded.userId);
+    if (!currentUser || currentUser.role !== "admin") {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    await Product.findByIdAndDelete(req.params.productId);
+    res.json({ message: "Product deleted" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
